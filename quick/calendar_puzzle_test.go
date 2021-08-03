@@ -6,16 +6,16 @@ import (
 )
 
 // 棋盘可通过 [8][7]int8 表示
-// 0: empty, 1: occupied, 2: cannot
+// 0: empty, 1: occupied, 9: cannot
 var emptyBoard = [8][7]int8{
-	{0, 0, 0, 0, 0, 0, 2},
-	{0, 0, 0, 0, 0, 0, 2},
+	{0, 0, 0, 0, 0, 0, 9},
+	{0, 0, 0, 0, 0, 0, 9},
 	{},
 	{},
 	{},
 	{},
 	{},
-	{2, 2, 2, 2},
+	{9, 9, 9, 9, 0, 0, 0},
 }
 
 // 4*4 可表示任意形状
@@ -137,6 +137,44 @@ func Rotation(curr [4][4]int8) [4][4]int8 {
 	return res
 }
 
+func MoveToTopLeft(res [4][4]int8) [4][4]int8 {
+	rowSum, colSum := [4]int8{}, [4]int8{}
+	for i := range res {
+		for j := 0; j < 4; j++ {
+			rowSum[i] += res[i][j]
+			colSum[j] += res[i][j]
+		}
+	}
+	topEmpty, topContinue, leftEmpty, leftContinue := 0, true, 0, true
+	for idx := 0; idx < 4; idx++ {
+		if rowSum[idx] == 0 && topContinue {
+			topEmpty++
+		} else {
+			topContinue = false
+		}
+		if colSum[idx] == 0 && leftContinue {
+			leftEmpty++
+		} else {
+			leftContinue = false
+		}
+	}
+	if topEmpty > 0 {
+		for i := topEmpty; i < 4; i++ {
+			for j := 0; j < 4; j++ {
+				res[i-topEmpty][j], res[i][j] = res[i][j], 0
+			}
+		}
+	}
+	if leftEmpty > 0 {
+		for j := leftEmpty; j < 4; j++ {
+			for i := 0; i < 4; i++ {
+				res[i][j-leftEmpty], res[i][j] = res[i][j], 0
+			}
+		}
+	}
+	return res
+}
+
 func initBoard(date time.Time) [8][7]int8 {
 	month := date.Month() - 1 // [0, 11]
 	day := date.Day() - 1     // [0, 30]
@@ -157,9 +195,14 @@ func initBoard(date time.Time) [8][7]int8 {
 	return res
 }
 
-func fill(board [8][7]int8, blocks [10][4][4][4]int8) bool {
-	// todo @lzh fill board with dfs
-	return false
+func fill(board [8][7]int8, blocks [10][4][4][4]int8, curr [][4][4]int8, visited map[Sharp]bool) ([][4][4]int8, bool) {
+	if len(visited) == 10 {
+		return curr, true
+	}
+
+	// todo @lzh 必须压缩，否则不好做「见缝插针」
+
+	return nil, false
 }
 
 func TestCalc(t *testing.T) {
@@ -167,7 +210,7 @@ func TestCalc(t *testing.T) {
 	for b := range blocks {
 		for d := 0; d < 4; d++ {
 			if d > 0 {
-				blocks[b][d] = Rotation(blocks[b][d-1])
+				blocks[b][d] = MoveToTopLeft(Rotation(blocks[b][d-1]))
 			}
 		}
 	}
@@ -175,12 +218,17 @@ func TestCalc(t *testing.T) {
 	board := initBoard(time.Now())
 
 	// dfs
-	if fill(board, blocks) {
+	if res, ok := fill(board, blocks, [][4][4]int8{}, map[Sharp]bool{}); ok {
 		// output
-		// doing @lzh how to output
+		for _, b := range res {
+			for _, row := range b {
+				t.Logf("%v", row)
+			}
+			t.Log()
+		}
 	}
 
-	//// output
+	// output
 	//for _, dir2Block := range blocks {
 	//	for d := 0; d < 4; d++ {
 	//		t.Logf("dir: %d", d)
