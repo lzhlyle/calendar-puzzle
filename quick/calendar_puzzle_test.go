@@ -2,6 +2,7 @@ package quick
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 	"testing"
 	"time"
@@ -207,7 +208,7 @@ func initBoard(date time.Time) [8][7]int8 {
 func fill(board [8][7]int8, blocks [10][4][4][4]int8) ([8][7]int8, error) {
 	// zip
 	zBoard := zipBoard(board)
-	zBlocks := [10][4]int16{}
+	zBlocks := [10][4]int64{}
 	for i := range blocks {
 		for d := range blocks[i] {
 			zBlocks[i][d] = zipBlock(blocks[i][d])
@@ -215,80 +216,100 @@ func fill(board [8][7]int8, blocks [10][4][4][4]int8) ([8][7]int8, error) {
 	}
 
 	// prepare dfs
-	res, ok := tryFill([8][7]int8{}, zBoard, zBlocks, 0)
+	res, ok := tryFill(board, zBoard, zBlocks, 0)
 	if !ok {
 		return [8][7]int8{}, errors.New("can not fill")
 	}
 	return res, nil
 }
 
-func tryFill(curr [8][7]int8, zipCurr int64, zBlocks [10][4]int16, visited int16) ([8][7]int8, bool) {
-	if visited == (1<<10)-1 {
+func tryFill(curr [8][7]int8, zipCurr int64, zBlocks [10][4]int64, i int) ([8][7]int8, bool) {
+	// i: block index
+	if i >= 10 {
 		return curr, true
 	}
 
-	// 选砖块
-	for i := range zBlocks {
-		if visited == visited|(1<<i) {
-			continue
-		}
-		// 选方向
-		for d := range zBlocks[i] {
-			block := zBlocks[i][d]
-			// 选位置
-			// 在棋盘上从左上角开始尽量拼进去，直到可放入：在二进制从右向左滑动
-			for loc := 0; loc < 56; loc++ {
-				move := block << loc
-				tryMove := move
-				// 尝试放入：检查移动后的每一位
-				for tryMove > 0 {
-					// 看最低位的 1 是否有占用
-					lowest := tryMove & -tryMove
-					if zipCurr == zipCurr|int64(lowest) {
-						// 已被占用
-						break
-					}
-					// 消掉最低位的 1
-					tryMove &= tryMove - 1
-				}
-				// 是否可放入
-				if tryMove == 0 {
-					// copy to next curr
-					nextCurr := [8][7]int8{}
-					for ni := range curr {
-						for nj := range curr[ni] {
-							nextCurr[ni][nj] = curr[ni][nj]
-						}
-					}
-					// 将 blocks[i][d] 放 curr 的 loc 位置上，标记为 blocks 的索引 i
-					locI, locJ := loc/7, loc%7
-					for bi := range blocks[i][d] {
-						for bj := range blocks[i][d][bi] {
-							nextCurr[locI+bi][locJ+bj] = int8(i)
-						}
-					}
+	//outputUnzipBoard(zipCurr)
 
-					res, ok := tryFill(nextCurr, zipCurr|int64(move), zBlocks, visited|(1<<i))
-					if ok {
-						return res, true
-					}
-				}
+	// 选方向
+	for d := range zBlocks[i] {
+		zBlock := zBlocks[i][d]
 
-				// 换个位置在尝试放入
+		//outputUnzipBlock(zBlock)
+
+		// 选位置
+		// 在棋盘上从左上角开始尽量拼进去，直到可放入：在二进制从右向左滑动
+		for loc := 0; loc < 64-16; loc++ {
+			var move int64 = int64(zBlock << loc)
+			tryMove := move
+
+			// 尝试放入：检查移动后的每一位
+			for tryMove > 0 {
+				//outputBinaryString(tryMove)
+				//outputBinaryString(zipCurr)
+				// 看最低位的 1 是否有占用
+				lowest := tryMove & -tryMove
+				if zipCurr == zipCurr|lowest {
+					// 已被占用
+					break
+				}
+				// 消掉最低位的 1
+				tryMove &= tryMove - 1
 			}
-		}
-	}
 
-	// 都试过了，真的不行
-	return [8][7]int8{}, false
+			// 不可放入
+			if tryMove != 0 {
+				continue
+			}
+
+			// copy to next curr
+			nextCurr := [8][7]int8{}
+			for ni := range curr {
+				for nj := range curr[ni] {
+					nextCurr[ni][nj] = curr[ni][nj]
+				}
+			}
+			// 将 blocks[i][d] 放 curr 的 loc 位置上，标记为 blocks 的索引 i
+			out := false
+			locI, locJ := loc/7, loc%7
+			for bi := range blocks[i][d] {
+				for bj := range blocks[i][d][bi] {
+					if blocks[i][d][bi][bj] > 0 {
+						// 检查是否超出棋盘（二进制时不直观）
+						if locI+bi >= 8 || locJ+bj >= 7 {
+							out = true
+							break
+						}
+						nextCurr[locI+bi][locJ+bj] = int8(i)
+					}
+				}
+				if out {
+					break
+				}
+			}
+			if out {
+				continue
+			}
+
+			//output(nextCurr)
+			res, ok := tryFill(nextCurr, zipCurr|move, zBlocks, i+1)
+			if ok {
+				return res, true
+			}
+		} // loc
+	} // direction
+
+	// 这个 block，任何方向、任何格子都放不进去，剪枝
+	return curr, false
 }
 
-func zipBlock(block [4][4]int8) int16 {
-	var res int16
+// 也要压缩成 int64，与棋盘统一，方便判断「是否可放入棋盘」
+func zipBlock(block [4][4]int8) int64 {
+	var res int64
 	for i := range block {
 		for j := range block[i] {
 			if block[i][j] > 0 {
-				res |= 1 << (len(block[i])*i + j)
+				res |= 1 << (7*i + j)
 			}
 		}
 	}
@@ -324,29 +345,44 @@ func TestCalc(t *testing.T) {
 	if err != nil {
 		t.Logf("FAIL, err: %v", err)
 	}
-	// output
-	for _, b := range res {
-		for _, row := range b {
-			t.Logf("%v", row)
-		}
-		t.Log()
-	}
+	output(res)
+}
 
-	// output
-	//for _, dir2Block := range blocks {
-	//	for d := 0; d < 4; d++ {
-	//		t.Logf("dir: %d", d)
-	//		for _, row := range dir2Block[d] {
-	//			t.Logf("%v", row)
-	//		}
-	//		t.Log()
-	//	}
-	//	t.Log("======")
-	//}
-	//
-	//for i := range board {
-	//	t.Logf("%v", board[i])
-	//}
+func outputBinaryString(val int64) {
+	fmt.Println(strconv.FormatInt(val, 2))
+	fmt.Println()
+}
+
+func outputUnzipBoard(val int64) {
+	var board [8][7]int8
+	for i := 0; i < 8; i++ {
+		for j := 0; j < 7; j++ {
+			board[i][j] = int8(val & 1)
+			val >>= 1
+		}
+	}
+	output(board)
+}
+
+func output(board [8][7]int8) {
+	for _, b := range board {
+		for _, row := range b {
+			fmt.Printf("%v\t", row)
+		}
+		fmt.Println()
+	}
+	fmt.Println()
+}
+
+func outputUnzipBlock(val int64) {
+	var block [8][7]int8
+	for i := 0; i < 8; i++ {
+		for j := 0; j < 7; j++ {
+			block[i][j] = int8(val & 1)
+			val >>= 1
+		}
+	}
+	output(block)
 }
 
 func TestZipBoard(t *testing.T) {
