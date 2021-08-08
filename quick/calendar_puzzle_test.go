@@ -1,21 +1,29 @@
 package quick
 
 import (
+	"errors"
+	"strconv"
 	"testing"
 	"time"
 )
 
 // 棋盘可通过 [8][7]int8 表示
-// 0: empty, 1: occupied, 9: cannot
+// -1: empty, 20: date, 99: forbid, [0, 9]: block
+const (
+	Empty  = -1
+	Date   = 20
+	Forbid = 99
+)
+
 var emptyBoard = [8][7]int8{
-	{0, 0, 0, 0, 0, 0, 9},
-	{0, 0, 0, 0, 0, 0, 9},
-	{},
-	{},
-	{},
-	{},
-	{},
-	{9, 9, 9, 9, 0, 0, 0},
+	{Empty, Empty, Empty, Empty, Empty, Empty, Forbid},
+	{Empty, Empty, Empty, Empty, Empty, Empty, Forbid},
+	{Empty, Empty, Empty, Empty, Empty, Empty, Empty},
+	{Empty, Empty, Empty, Empty, Empty, Empty, Empty},
+	{Empty, Empty, Empty, Empty, Empty, Empty, Empty},
+	{Empty, Empty, Empty, Empty, Empty, Empty, Empty},
+	{Empty, Empty, Empty, Empty, Empty, Empty, Empty},
+	{Forbid, Forbid, Forbid, Forbid, Empty, Empty, Empty},
 }
 
 // 4*4 可表示任意形状
@@ -137,6 +145,7 @@ func Rotation(curr [4][4]int8) [4][4]int8 {
 	return res
 }
 
+// 不需要在图形的基础上移动，压缩后右移即可
 func MoveToTopLeft(res [4][4]int8) [4][4]int8 {
 	rowSum, colSum := [4]int8{}, [4]int8{}
 	for i := range res {
@@ -188,21 +197,61 @@ func initBoard(date time.Time) [8][7]int8 {
 	}
 
 	// current date should 2
-	res[month/6][month%6] = 2
-	res[day/7+2][day%7] = 2
-	res[week/4+6][week%4+3+week/4] = 2
+	res[month/6][month%6] = Date
+	res[day/7+2][day%7] = Date
+	res[week/4+6][week%4+3+week/4] = Date
 
 	return res
 }
 
-func fill(board [8][7]int8, blocks [10][4][4][4]int8, curr [][4][4]int8, visited map[Sharp]bool) ([][4][4]int8, bool) {
-	if len(visited) == 10 {
-		return curr, true
+func fill(board [8][7]int8, blocks [10][4][4][4]int8) ([][]int8, error) {
+	// zip
+	zBoard := zipBoard(board)
+	zBlocks := [10][4]int16{}
+	for i := range blocks {
+		for d := range blocks[i] {
+			zBlocks[i][d] = zipBlock(blocks[i][d])
+		}
 	}
 
-	// todo @lzh 必须压缩，否则不好做「见缝插针」
+	// prepare dfs
+	res, ok := tryFill(make([][]int8, 10), zBoard, 0)
+	if !ok {
+		return nil, errors.New("can not fill")
+	}
+	return res, nil
+}
 
+func tryFill(curr [][]int8, zipCurr int64, visited int16) ([][]int8, bool) {
+	// doing @lzh try Fill
 	return nil, false
+}
+
+func zipBlock(block [4][4]int8) int16 {
+	var res int16
+	for i := range block {
+		for j := range block[i] {
+			if block[i][j] > 0 {
+				res |= 1 << (len(block[i])*i + j)
+			}
+		}
+	}
+	for res>>1 == (res>>1)<<1 {
+		res >>= 1
+	}
+	return res
+}
+
+func zipBoard(board [8][7]int8) int64 {
+	var res int64
+	for i := range board {
+		for j := range board[i] {
+			if board[i][j] > Empty {
+				res |= 1 << (len(board[i])*i + j)
+			}
+		}
+	}
+	return res
 }
 
 func TestCalc(t *testing.T) {
@@ -210,7 +259,7 @@ func TestCalc(t *testing.T) {
 	for b := range blocks {
 		for d := 0; d < 4; d++ {
 			if d > 0 {
-				blocks[b][d] = MoveToTopLeft(Rotation(blocks[b][d-1]))
+				blocks[b][d] = Rotation(blocks[b][d-1])
 			}
 		}
 	}
@@ -218,14 +267,16 @@ func TestCalc(t *testing.T) {
 	board := initBoard(time.Now())
 
 	// dfs
-	if res, ok := fill(board, blocks, [][4][4]int8{}, map[Sharp]bool{}); ok {
-		// output
-		for _, b := range res {
-			for _, row := range b {
-				t.Logf("%v", row)
-			}
-			t.Log()
+	res, err := fill(board, blocks)
+	if err != nil {
+		t.Logf("FAIL, err: %v", err)
+	}
+	// output
+	for _, b := range res {
+		for _, row := range b {
+			t.Logf("%v", row)
 		}
+		t.Log()
 	}
 
 	// output
@@ -243,4 +294,12 @@ func TestCalc(t *testing.T) {
 	//for i := range board {
 	//	t.Logf("%v", board[i])
 	//}
+}
+
+func TestZipBoard(t *testing.T) {
+	exp, act := "11110000000000000000000000000000000000010000001000000", strconv.FormatInt(zipBoard(emptyBoard), 2)
+	if exp != act {
+		t.Logf("\nexp:%s\nact:%s", exp, act)
+		t.Fail()
+	}
 }
