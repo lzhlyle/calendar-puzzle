@@ -345,8 +345,15 @@ func outputUnzipBoard(val int64) {
 
 func Output(board [8][7]int8) {
 	for _, b := range board {
-		for _, row := range b {
-			fmt.Printf("%v\t", row)
+		for _, v := range b {
+			switch v {
+			case Forbid:
+				fmt.Printf("%s\t", " ")
+			case Date:
+				fmt.Printf("%s\t", ".")
+			default:
+				fmt.Printf("%v\t", v)
+			}
 		}
 		fmt.Println()
 	}
