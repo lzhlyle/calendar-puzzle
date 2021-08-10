@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	"../calendar-puzzle/quick"
+	"github.com/lzhlyle/calendar-puzzle/quick"
 )
 
 func main() {
