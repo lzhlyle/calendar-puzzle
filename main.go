@@ -32,7 +32,9 @@ func main() {
 	board := quick.InitBoard(date)
 
 	// dfs
+	startTime := time.Now()
 	res, err := quick.Fill(board, quick.Blocks)
+	fmt.Printf("cost: %v\n", time.Since(startTime))
 	if err != nil {
 		fmt.Printf("FAIL, err: %v", err)
 	}
